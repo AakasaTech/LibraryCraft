@@ -1,0 +1,137 @@
+// LibraryCraft schema. Models for later phases are staged in schema-later.prisma.txt.
+// Tenant-owned models carry workspaceId and must only be accessed via lib/db/tenant.ts.
+// Global models: User, Account, Session, VerificationToken, Plan (and Edition from Phase 2).
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+// The connection URL lives in prisma.config.ts (Prisma 7).
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Auth (Auth.js Prisma adapter shape) ----------
+
+model User {
+  id            String            @id @default(cuid())
+  name          String?
+  email         String            @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime          @default(now())
+  accounts      Account[]
+  sessions      Session[]
+  memberships   WorkspaceMember[]
+  ownedSpaces   Workspace[]       @relation("WorkspaceOwner")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------- Tenancy & billing ----------
+
+enum WorkspaceType {
+  HOME
+  SCHOOL
+  COMMUNITY
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model Workspace {
+  id           String            @id @default(cuid())
+  name         String
+  slug         String            @unique
+  type         WorkspaceType     @default(HOME)
+  ownerId      String
+  owner        User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  planId       String
+  plan         Plan              @relation(fields: [planId], references: [id])
+  createdAt    DateTime          @default(now())
+  members      WorkspaceMember[]
+  subscription Subscription?
+}
+
+model WorkspaceMember {
+  id          String     @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        MemberRole @default(VIEWER)
+  createdAt   DateTime   @default(now())
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model Plan {
+  id                 String      @id // "free" | "pro" | "family" | "organisation"
+  name               String
+  maxCopies          Int? // null = unlimited
+  maxMembers         Int?
+  monthlyCoverScans  Int
+  features           String[] // e.g. ["bulkScan","csv","borrowerReminders","orgTools"]
+  stripePriceMonthly String?
+  stripePriceYearly  String?
+  workspaces         Workspace[]
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  UNPAID
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  workspaceId          String             @unique
+  stripeCustomerId     String             @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  updatedAt            DateTime           @updatedAt
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}

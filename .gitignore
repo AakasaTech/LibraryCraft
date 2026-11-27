@@ -1,0 +1,22 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+playwright-report/
+test-results/
+.env
+.env*.local
+.vercel
+*.log
+.DS_Store
+Thumbs.db
+
+# scaffold additions
+.pnp
+.pnp.*
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+.pnpm-debug.log*
+/prisma/generated/

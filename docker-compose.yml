@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:17
+    container_name: librarycraft-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: librarycraft
+      POSTGRES_PASSWORD: librarycraft
+      POSTGRES_DB: librarycraft
+    ports:
+      - "5432:5432"
+    volumes:
+      - librarycraft-pgdata:/var/lib/postgresql/data
+
+volumes:
+  librarycraft-pgdata:
