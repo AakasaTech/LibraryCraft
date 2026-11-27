@@ -5,7 +5,7 @@ Claude Code: read this file at the start of every session and update it at the e
 ## Phases
 
 - [x] Phase 1 — Foundation (scaffold, auth, workspaces, tenancy)
-- [ ] Phase 2 — Catalogue (ISBN lookup, shelves, books, browse)
+- [x] Phase 2 — Catalogue (ISBN lookup, shelves, books, browse)
 - [ ] Phase 3 — Scanning + PWA
 - [ ] Phase 4 — Lending (borrowers, loans, reminders cron)
 - [ ] Phase 5 — Billing (Stripe, plan limits, members)
@@ -13,7 +13,7 @@ Claude Code: read this file at the start of every session and update it at the e
 
 ## Current status
 
-Phase 1 done. Next: Phase 2 (Catalogue). lint, typecheck, 16 unit/integration tests and 4 Playwright tests pass; `pnpm build` succeeds.
+Phases 1–2 done. Next: Phase 3 (Scanning + PWA). lint, typecheck, 46 unit/integration tests and 6 Playwright tests pass; `pnpm build` succeeds.
 
 ## Decisions log
 
@@ -29,10 +29,27 @@ Phase 1 done. Next: Phase 2 (Catalogue). lint, typecheck, 16 unit/integration te
 | 2026-11-27 | Tenancy: `getTenantDb` is a Prisma `$extends` query extension that injects `workspaceId` into where/data. Callers must use scalar FKs (not relation `connect`). Global models throw through it. |
 | 2026-11-27 | Tests use the separate `librarycraft_test` DB (`DATABASE_URL_TEST`), prepared with `migrate deploy` + seed. Not reset: tests use unique random data. E2E "mocks the provider" by inserting User + Session rows and setting the `authjs.session-token` cookie. |
 | 2026-11-27 | Pro plan maxMembers set to 2 (spec only says Family has 6); Free includes the `coverScan` feature since it gets 10 scans/month. Revisit in Phase 5. |
+| 2026-11-27 | CopyTag has `workspaceId` (rule 1). Edition has `authorsText` (lower-cased joined authors) for partial author search. |
+| 2026-11-27 | Google Books' keyless quota is 0 (429), so the fallback runs only when `GOOGLE_BOOKS_API_KEY` is set. |
+| 2026-11-27 | Shared-catalogue rule: a manual entry with an ISBN first tries the catalogues; a MANUAL Edition claims an ISBN only when both miss. Users edit their Copy, never an Edition. Seed demo books have no ISBN, so they never shadow real lookups. |
+| 2026-11-27 | Parent IDs sent by clients (shelfId, roomId, bookcaseId) are always resolved through `getTenantDb` before use (`resolveShelfId` in lib/catalogue/copies.ts). A foreign ID becomes "not found". |
+| 2026-11-27 | Covers are hot-linked with plain `<img>` (Open Library covers redirect across hosts). Reorder is ↑/↓ buttons, not drag. Deleting a room or bookcase is blocked while any of its shelves hold books. |
+| 2026-11-27 | Prisma 7 `migrate dev` no longer runs `generate`: run `pnpm prisma generate` after every migration. |
+| 2026-11-27 | E2E runs against `next build && next start` (cold dev routes timed out), with 3 workers, a 60 s test timeout and a 15 s expect timeout, because this Windows machine is slow under load. `AUTH_EMAIL_TO_CONSOLE=1` makes production-mode e2e log magic links instead of calling Resend. |
 
 ## Session notes
 
 <!-- Newest first. One short entry per session: what was done, what's next, blockers. -->
+
+### 2026-11-27 — Phase 2 (Catalogue)
+- `catalogue` migration: Edition, Copy, Room, Bookcase, Shelf, Tag, CopyTag; all tenant models added to `TENANT_MODELS`.
+- `lib/isbn/isbn.ts` (normalize, validate, convert, parse) and `lib/isbn/lookup.ts` (DB → Open Library → Google → upsert; 5 s timeouts; failures count as a miss). A live lookup of 9780261103573 works.
+- `assertWithinPlan` now covers `copy`; the limit message links to settings.
+- Shelves page (tree, create/rename/↑↓/delete, move-books-then-delete) and a shelf page. Books: add by ISBN (confirmation card plus duplicate warning), manual entry, detail/edit/move/delete, browse (search, shelf and status filters, grid/list, 24 per page). The dashboard shows counts.
+- Seed: a demo workspace at `/demo` (sign in as demo@librarycraft.local).
+- Tests: ISBN, lookup (mocked fetch), copy limit, tenancy for every catalogue model plus the foreign-shelf check; e2e for add by ISBN → search → shelf, and move-books-then-delete.
+- Next: Phase 3. The confirmation card becomes editable there, and the last-used shelf gets pre-selected.
+- Not done: a tags UI (the models and tenancy are done), bulk move, stats.
 
 ### 2026-11-27 — Phase 1 (Foundation)
 - Scaffolded Next 16 + TS strict + Tailwind 4 + ESLint 9 + Vitest 5 + Playwright 1.65 (pnpm).

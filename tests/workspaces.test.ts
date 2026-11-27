@@ -52,3 +52,20 @@ describe("assertWithinPlan('member')", () => {
     await expect(assertWithinPlan(workspace.id, "member")).resolves.toBeUndefined();
   });
 });
+
+describe("assertWithinPlan('copy')", () => {
+  it("blocks the 301st copy on Free and allows it on Pro", async () => {
+    const { workspace } = await createWorkspaceWithOwner();
+    const edition = await prisma.edition.create({ data: { title: "Filler", authors: [], source: "MANUAL" } });
+    await prisma.copy.createMany({
+      data: Array.from({ length: 299 }, () => ({ workspaceId: workspace.id, editionId: edition.id })),
+    });
+    await expect(assertWithinPlan(workspace.id, "copy")).resolves.toBeUndefined();
+    await prisma.copy.create({ data: { workspaceId: workspace.id, editionId: edition.id } });
+    const err = await assertWithinPlan(workspace.id, "copy").catch((e) => e);
+    expect(err).toBeInstanceOf(PlanLimitError);
+    expect(err.message).toBe("You've reached 300 books on the Free plan. Upgrade to add more.");
+    await prisma.workspace.update({ where: { id: workspace.id }, data: { planId: "pro" } });
+    await expect(assertWithinPlan(workspace.id, "copy")).resolves.toBeUndefined();
+  });
+});

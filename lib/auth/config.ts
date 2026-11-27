@@ -11,8 +11,8 @@ const providers: Provider[] = [
   Resend({
     apiKey: env.RESEND_API_KEY,
     from: env.EMAIL_FROM,
-    // Local dev without a Resend key: print the magic link instead of emailing it.
-    ...(!env.RESEND_API_KEY && env.NODE_ENV !== "production"
+    // Local dev without a Resend key (or e2e, via AUTH_EMAIL_TO_CONSOLE): print the magic link instead of emailing it.
+    ...(env.AUTH_EMAIL_TO_CONSOLE === "1" || (!env.RESEND_API_KEY && env.NODE_ENV !== "production")
       ? { sendVerificationRequest: async ({ url }: { url: string }) => console.info(`[auth] magic link: ${url}`) }
       : {}),
   }),

@@ -64,3 +64,46 @@ describe("getTenantDb isolation", () => {
     expect(() => scopeArgs("$queryRaw", {}, "w")).toThrow();
   });
 });
+
+describe("catalogue models are workspace-scoped", () => {
+  async function seedCatalogue(workspaceId: string) {
+    const room = await prisma.room.create({ data: { workspaceId, name: "Living room" } });
+    const bookcase = await prisma.bookcase.create({ data: { workspaceId, roomId: room.id, name: "Tall case" } });
+    const shelf = await prisma.shelf.create({ data: { workspaceId, bookcaseId: bookcase.id, name: "Shelf 1" } });
+    const edition = await prisma.edition.create({ data: { title: "Shared", authors: [], source: "MANUAL" } });
+    const copy = await prisma.copy.create({ data: { workspaceId, editionId: edition.id, shelfId: shelf.id } });
+    const tag = await prisma.tag.create({ data: { workspaceId, name: "Signed" } });
+    await prisma.copyTag.create({ data: { workspaceId, copyId: copy.id, tagId: tag.id } });
+    return { room, bookcase, shelf, edition, copy, tag };
+  }
+
+  it("A sees none of B's rooms, bookcases, shelves, copies, tags or copy-tags", async () => {
+    const a = await createWorkspaceWithOwner();
+    const b = await createWorkspaceWithOwner();
+    const bData = await seedCatalogue(b.workspace.id);
+    const dbA = getTenantDb(a.workspace.id);
+
+    expect(await dbA.room.findMany()).toEqual([]);
+    expect(await dbA.bookcase.findMany()).toEqual([]);
+    expect(await dbA.shelf.findUnique({ where: { id: bData.shelf.id } })).toBeNull();
+    expect(await dbA.copy.findUnique({ where: { id: bData.copy.id } })).toBeNull();
+    expect(await dbA.copy.count()).toBe(0);
+    expect(await dbA.tag.findMany()).toEqual([]);
+    expect(await dbA.copyTag.findMany()).toEqual([]);
+    expect((await dbA.copy.updateMany({ data: { notes: "pwned" } })).count).toBe(0);
+    expect((await dbA.room.deleteMany()).count).toBe(0);
+    await expect(dbA.copy.delete({ where: { id: bData.copy.id } })).rejects.toThrow();
+
+    // Search through a relation filter stays scoped too.
+    expect(await dbA.copy.findMany({ where: { edition: { title: "Shared" } } })).toEqual([]);
+    expect(await prisma.copy.count({ where: { workspaceId: b.workspace.id } })).toBe(1);
+  });
+
+  it("A cannot resolve B's shelf as a parent, so it cannot file a copy there", async () => {
+    const a = await createWorkspaceWithOwner();
+    const b = await createWorkspaceWithOwner();
+    const bData = await seedCatalogue(b.workspace.id);
+    // Actions load parent IDs through the tenant client before using them; a foreign shelf is invisible.
+    expect(await getTenantDb(a.workspace.id).shelf.findUnique({ where: { id: bData.shelf.id } })).toBeNull();
+  });
+});

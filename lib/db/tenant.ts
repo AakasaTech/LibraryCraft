@@ -2,7 +2,16 @@ import "server-only";
 import { prisma } from "@/lib/db/client";
 
 // Models that carry workspaceId. Add each new tenant model here in the phase that migrates it.
-export const TENANT_MODELS = new Set<string>(["WorkspaceMember", "Subscription"]);
+export const TENANT_MODELS = new Set<string>([
+  "WorkspaceMember",
+  "Subscription",
+  "Room",
+  "Bookcase",
+  "Shelf",
+  "Copy",
+  "Tag",
+  "CopyTag",
+]);
 
 const WHERE_OPS = new Set([
   "findUnique",

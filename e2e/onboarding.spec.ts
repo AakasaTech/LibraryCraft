@@ -1,24 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../prisma/generated/client";
+import { prisma, signInAsNewUser } from "./helpers";
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL_TEST! }) });
 test.afterAll(() => prisma.$disconnect());
-
-// "Mock the provider": instead of driving Google or a real email, write the User + Session rows the
-// Auth.js Prisma adapter would create, and hand the browser the session cookie.
-async function signInAsNewUser(context: import("@playwright/test").BrowserContext) {
-  const user = await prisma.user.create({ data: { email: `${randomUUID()}@e2e.local`, name: "E2E User" } });
-  const sessionToken = randomUUID();
-  await prisma.session.create({
-    data: { sessionToken, userId: user.id, expires: new Date(Date.now() + 24 * 3600 * 1000) },
-  });
-  await context.addCookies([
-    { name: "authjs.session-token", value: sessionToken, domain: "localhost", path: "/", httpOnly: true, sameSite: "Lax" },
-  ]);
-  return user;
-}
 
 test("signed-out visitors are sent to sign-in", async ({ page }) => {
   await page.goto("/");

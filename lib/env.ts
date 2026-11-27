@@ -12,6 +12,8 @@ const schema = z.object({
   AUTH_SECRET: z.string().min(1),
   AUTH_GOOGLE_ID: optional,
   AUTH_GOOGLE_SECRET: optional,
+  // "1" prints magic links to the server log instead of emailing them. For e2e under `next start`; never in production.
+  AUTH_EMAIL_TO_CONSOLE: optional,
 
   RESEND_API_KEY: optional,
   EMAIL_FROM: z.string().default("LibraryCraft <hello@librarycraft.aakasa.dev>"),
