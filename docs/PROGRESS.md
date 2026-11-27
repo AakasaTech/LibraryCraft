@@ -15,6 +15,53 @@ Claude Code: read this file at the start of every session and update it at the e
 
 Phases 1–2 done. Next: Phase 3 (Scanning + PWA). lint, typecheck, 46 unit/integration tests and 6 Playwright tests pass; `pnpm build` succeeds.
 
+### Phase 3 plan (approved 2026-11-27, not started)
+
+No code written yet. First step: `pnpm add @zxing/browser@0.2.1 @zxing/library@0.23.0`, then check the reader API in its typings.
+
+1. **Copy overrides.** Edition is shared by every library, so field edits on the confirmation card are stored on `Copy`. Add nullable `title`, `subtitle`, `publisher` and `year`, plus `authors String[]` (default `[]`, which means no override). Migration: `copy_overrides`, then `pnpm prisma generate`.
+   - `lib/catalogue/display.ts`: `displayBook(copy, edition)` returns the override or else the edition's value. Use it in the book list, the book detail page and the shelf page.
+   - Browse `q` also matches the override title and authors.
+   - `addCopy` takes `overrides` and stores only the fields that differ from the edition.
+2. **Pure logic** in `lib/scan/`:
+   - `createRepeatFilter(3000ms, now)` ignores the same code for 3 s.
+   - `createWedgeBuffer({maxGapMs: 50, now})` returns a code on Enter only when the keys came fast and the result is a valid ISBN (`parseIsbn`).
+3. **Scanner** (`components/scan/scanner.tsx`):
+   - `getUserMedia` with the environment camera. Decode with `BarcodeDetector` when it supports `ean_13`; otherwise lazy-load `@zxing/browser`.
+   - Torch toggle only when supported. Beep and vibrate on each detect.
+   - Error states: permission denied, no camera, insecure context (phones need HTTPS), other failure.
+   - The camera starts only on a tap.
+   - A global keydown listener for USB wedge scanners.
+4. **`/scan` page.**
+   - `ScanFlow` flow: scanner and manual ISBN entry → `lookupAction` → editable shared `ConfirmCard` (also used by `/books/new`) → `scanSaveAction`.
+   - `scanSaveAction` sets the `lc-last-shelf-{slug}` cookie (pre-selected next time) and returns `{saved}`. No redirect: a toast shows and the scanner stays open.
+5. **Scan onto this shelf.**
+   - The shelf page links to `/scan?shelf={id}`.
+   - `lib/catalogue/shelf-scan.ts` resolves the shelf through the tenant db, then moves a copy of that edition that isn't already there. It returns `moved`, `already-here` or `unknown`; unknown books go to the add card with the shelf pre-selected.
+   - A running list shows each result.
+6. **PWA.**
+   - `app/manifest.ts`.
+   - Placeholder "LC" icons from `next/og` ImageResponse: `app/icons/[size]/route.tsx` (192, 512) and `app/apple-icon.tsx`.
+   - `appleWebApp` metadata.
+   - `public/sw.js`:
+     - precaches `/offline`
+     - cache-first for `/_next/static` and icons
+     - network-first for navigations, with `/offline` as the fallback
+     - never caches authenticated HTML or POSTs
+   - Registered by `components/app/sw-register.tsx` in production only.
+   - `next.config.ts` adds `headers()` for `/sw.js` (no-cache).
+   - `app/offline/page.tsx`.
+7. **Tests.**
+   - Unit: the repeat filter, the wedge buffer, `displayBook`, overrides in `addCopy`, and the shelf-scan outcomes, including a tenancy check that shelf-scan can't move workspace B's copy.
+   - E2E `e2e/scan.spec.ts`:
+     - manual ISBN → edit the title → save → toast and last shelf pre-selected
+     - a simulated wedge scan
+     - shelf-mode move
+     - manifest and sw.js are served
+   - Camera decoding itself can't be tested headless.
+
+Not in Phase 3: bulk scan review, cover photos (both v1.1), and offline queuing of scans (the PWA caches only the app shell).
+
 ## Decisions log
 
 | Date | Decision |
